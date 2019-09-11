@@ -165,23 +165,38 @@ def list_observations(start=None, end=None, maxrec=None):
     observation date.
     """
 
-    where = ''
-    if start or end:
-        if start:
-            where = "WHERE lastModified>='{}'".format(date2ivoa(start))
-            if end:
-                where += " AND lastModified<='{}'".format(date2ivoa(end))
-        else:
-            where = "WHERE lastModified<='{}'".format(date2ivoa(end))
     top = ''
-
     if maxrec:
         if int(maxrec) < 1:
             raise AttributeError('maxrec must be positive integer')
         top = 'TOP {}'.format(maxrec)
-    query = "SELECT {} obs_id, min(lastModified) AS minLastModified " \
-            "FROM ivoa.obscore {} GROUP BY obs_id ORDER by minLastModified".\
-        format(top, where)
+    where = ''
+
+    lastMod = False  # TODO change to False to sort by obs date
+
+    if lastMod:
+        if start or end:
+            if start:
+                where = "WHERE lastModified>='{}'".format(date2ivoa(start))
+                if end:
+                    where += " AND lastModified<='{}'".format(date2ivoa(end))
+            else:
+                where = "WHERE lastModified<='{}'".format(date2ivoa(end))
+        query = "SELECT {} obs_id, min(lastModified) AS minLastModified " \
+                "FROM ivoa.obscore {} GROUP BY obs_id " \
+                "ORDER by minLastModified".\
+            format(top, where)
+    else:
+        if start or end:
+            if start:
+                where = 'WHERE t_min>={}'.format(AstropyTime(start).mjd)
+                if end:
+                    where += ' AND t_min<={}'.format(AstropyTime(end).mjd)
+            else:
+                where = 'WHERE t_min<={}'.format(AstropyTime(end).mjd)
+        query = "SELECT {} obs_id, min(t_min) AS obsTime " \
+                "FROM ivoa.obscore {} GROUP BY obs_id ORDER by obsTime". \
+            format(top, where)
     response = requests.get(ALMA_TAP_SYNC_URL,
                             params={'QUERY': query, 'LANG': 'ADQL'})
     response.raise_for_status()
@@ -191,7 +206,10 @@ def list_observations(start=None, end=None, maxrec=None):
     result = []
     for r in obs_ids.array:
         obsID = _to_obs_id(r[0].decode('ascii'))
-        timestamp = date2ivoa(AstropyTime(r[1]).datetime)
+        if lastMod:
+            timestamp = date2ivoa(AstropyTime(r[1]).datetime)
+        else:
+            timestamp = date2ivoa(AstropyTime(r[1], format='mjd').datetime)
         result.append('{}\t{}\t{}\n'.format(COLLECTION, obsID, timestamp))
 
     return result
