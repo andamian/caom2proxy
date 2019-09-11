@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<caom2:Observation xmlns:caom2="http://www.opencadc.org/caom2/xml/v2.3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="caom2:SimpleObservation" caom2:id="00000000-0000-0000-9b40-7ba3c2f80893" caom2:lastModified="2017-03-25T01:40:24.000" caom2:maxLastModified="2017-03-25T01:40:24.000">
+<caom2:Observation xmlns:caom2="http://www.opencadc.org/caom2/xml/v2.3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="caom2:SimpleObservation" caom2:id="00000000-0000-0000-855c-4b5d78fdf33b" caom2:lastModified="2017-03-25T01:40:24.000" caom2:maxLastModified="2017-03-25T01:40:24.000">
   <caom2:collection>ALMA</caom2:collection>
   <caom2:observationID>A001_X11a2_X11</caom2:observationID>
   <caom2:metaRelease>2017-03-25T01:40:24.000</caom2:metaRelease>
@@ -12,8 +12,8 @@
     <caom2:pi>Riechers, Dominik</caom2:pi>
     <caom2:title>Detailed Gas and Dust Physics in "Normal" Galaxies and Starbursts at z&gt;5</caom2:title>
     <caom2:keywords>
-      <caom2:keyword>Lyman Break Galaxies (LBG)</caom2:keyword>
       <caom2:keyword> Sub-mm Galaxies (SMG)</caom2:keyword>
+      <caom2:keyword>Lyman Break Galaxies (LBG)</caom2:keyword>
     </caom2:keywords>
   </caom2:proposal>
   <caom2:target>
@@ -34,7 +34,7 @@
     <caom2:wavelengthTau>0.00035</caom2:wavelengthTau>
   </caom2:environment>
   <caom2:planes>
-    <caom2:plane caom2:id="00000000-0000-0000-ac9d-c3c83fd9621c" caom2:lastModified="2017-03-25T01:40:24.000" caom2:maxLastModified="2017-03-25T01:40:24.000">
+    <caom2:plane caom2:id="00000000-0000-0000-8ae0-ee6fbe6ac75e" caom2:lastModified="2017-03-25T01:40:24.000" caom2:maxLastModified="2017-03-25T01:40:24.000">
       <caom2:productID>A001_X11a2_X11-raw</caom2:productID>
       <caom2:metaRelease>2017-03-25T01:40:24.000</caom2:metaRelease>
       <caom2:dataRelease>2018-04-03T00:00:00.000</caom2:dataRelease>
@@ -55,7 +55,7 @@
             </caom2:sample>
           </caom2:samples>
         </caom2:bounds>
-        <caom2:resolvingPower>65726.8767161206</caom2:resolvingPower>
+        <caom2:resolvingPower>65732.15456514517</caom2:resolvingPower>
         <caom2:emBand>Millimeter</caom2:emBand>
       </caom2:energy>
       <caom2:time>
@@ -78,20 +78,12 @@
         </caom2:states>
       </caom2:polarization>
       <caom2:artifacts>
-        <caom2:artifact caom2:id="00000000-0000-0000-9f07-c5273aa04aea" caom2:lastModified="2017-03-25T01:40:24.000" caom2:maxLastModified="2017-03-25T01:40:24.000">
+        <caom2:artifact caom2:id="00000000-0000-0000-8397-200e5c113309" caom2:lastModified="2017-03-25T01:40:24.000" caom2:maxLastModified="2017-03-25T01:40:24.000">
           <caom2:uri>alma:ALMA/A001_X11a2_X11/2016.1.00330.S_uid___A002_Xbe5932_X1015.asdm.sdm.tar</caom2:uri>
           <caom2:productType>science</caom2:productType>
           <caom2:releaseType>meta</caom2:releaseType>
           <caom2:contentType>application/x-tar</caom2:contentType>
           <caom2:contentLength>23749387264</caom2:contentLength>
-          <caom2:parts/>
-        </caom2:artifact>
-        <caom2:artifact caom2:id="00000000-0000-0000-bb86-b20666a394fd" caom2:lastModified="2017-03-25T01:40:24.000" caom2:maxLastModified="2017-03-25T01:40:24.000">
-          <caom2:uri>alma:ALMA/A001_X11a2_X11/2016.1.00330.S_uid___A001_X11a2_X11_001_of_001.tar</caom2:uri>
-          <caom2:productType>science</caom2:productType>
-          <caom2:releaseType>meta</caom2:releaseType>
-          <caom2:contentType>application/x-tar</caom2:contentType>
-          <caom2:contentLength>633518080</caom2:contentLength>
           <caom2:parts/>
         </caom2:artifact>
       </caom2:artifacts>

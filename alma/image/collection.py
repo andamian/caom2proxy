@@ -87,6 +87,8 @@ from astropy.time import Time as AstropyTime
 import re
 from astropy.io.votable import parse_single_table
 import copy
+import pyvo
+from urllib.parse import urlencode
 
 
 COLLECTION = 'ALMA'
@@ -100,6 +102,8 @@ ALMA_RELEASE_DATE_FORMAT = '%Y-%m-%d'
 # ALMA_TAP_SYNC_URL = 'https://almascience.nrao.edu/tap/sync'
 ALMA_TAP_SYNC_URL = \
     'http://beta.cadc-ccda.hia-iha.nrc-cnrc.gc.ca/alma-obscore/sync'
+ALMA_DATALINK_URL = \
+    'http://beta.cadc-ccda.hia-iha.nrc-cnrc.gc.ca/alma-datalink/sync'
 
 
 logger = logging.getLogger(__name__)
@@ -137,14 +141,14 @@ def resolve_artifact_uri(uri):
             'Cannot determine the observation id for artifact uri {}'.
             format(uri))
     member_ous = _to_member_ouss_id(obs_id)
-    file_urls = _get_raw_artifacts(member_ous)
+    art_info = _get_artifact_info(member_ous)
     url = None
     logger.debug("Add urls for {} to cache".format(obs_id))
-    for f in file_urls:
-        if file in f:
-            url = f
+    for f in art_info:
+        if file in f[0]:
+            url = f[0]
         else:
-            cached_art_urls[_art_url2uri(f, member_ous)] = f
+            cached_art_urls[_art_url2uri(f[0], member_ous)] = f[0]
     logger.debug('Size of artifact URL cache: {}'.format(len(cached_art_urls)))
     return url
 
@@ -164,19 +168,19 @@ def list_observations(start=None, end=None, maxrec=None):
     where = ''
     if start or end:
         if start:
-            where = 'WHERE t_min>={}'.format(AstropyTime(start).mjd)
+            where = "WHERE lastModified>='{}'".format(date2ivoa(start))
             if end:
-                where += ' AND t_min<={}'.format(AstropyTime(end).mjd)
+                where += " AND lastModified<='{}'".format(date2ivoa(end))
         else:
-            where = 'WHERE t_min<={}'.format(AstropyTime(end).mjd)
+            where = "WHERE lastModified<='{}'".format(date2ivoa(end))
     top = ''
 
     if maxrec:
         if int(maxrec) < 1:
             raise AttributeError('maxrec must be positive integer')
         top = 'TOP {}'.format(maxrec)
-    query = "SELECT {} obs_id, min(t_min) AS obsTime " \
-            "FROM ivoa.obscore {} GROUP BY obs_id ORDER by obsTime".\
+    query = "SELECT {} obs_id, min(lastModified) AS minLastModified " \
+            "FROM ivoa.obscore {} GROUP BY obs_id ORDER by minLastModified".\
         format(top, where)
     response = requests.get(ALMA_TAP_SYNC_URL,
                             params={'QUERY': query, 'LANG': 'ADQL'})
@@ -187,7 +191,7 @@ def list_observations(start=None, end=None, maxrec=None):
     result = []
     for r in obs_ids.array:
         obsID = _to_obs_id(r[0].decode('ascii'))
-        timestamp = date2ivoa(AstropyTime(r[1], format='mjd').datetime)
+        timestamp = date2ivoa(AstropyTime(r[1]).datetime)
         result.append('{}\t{}\t{}\n'.format(COLLECTION, obsID, timestamp))
 
     return result
@@ -363,22 +367,44 @@ def add_raw_plane(observation, cal_planes, member_ous, meta_release):
 
 def add_raw_artifacts(plane, member_ous):
     """ Adds all the raw artifacts to the plane """
-    for file_url in _get_raw_artifacts(member_ous):
-        add_raw_artifact(plane, file_url, member_ous)
+    # method 1:
+    # files = Alma().stage_data(member_ous)
+    # file_urls = [r['URL'] for r in files if r['uid'] == member_ous]
+
+    # method 2:
+    artifacts = _get_artifact_info(member_ous)
+    for art in artifacts:
+        content_type = art[2]
+        if content_type == '':
+            content_type = mimetypes.guess_type(art[0])[0]
+        if 'auxiliary' in art[0]:
+            product_type = caom2.ProductType.AUXILIARY
+        else:
+            product_type = caom2.ProductType.SCIENCE
+        file_uri = _art_url2uri(art[0], member_ous)
+        artifact = caom2.Artifact(file_uri, product_type,
+                                  caom2.ReleaseType.META,
+                                  content_type=content_type,
+                                  content_length=art[1])
+        artifact.last_modified = plane.max_last_modified
+        artifact.max_last_modified = plane.max_last_modified
+        plane.artifacts[file_uri] = artifact
 
 
-def _get_raw_artifacts(member_ous):
-    logger.info("Staging artifacts for member_ous {}".format(member_ous))
-    files = Alma().stage_data(member_ous)
-    file_urls = list(set(files['URL']))
-    logger.debug('\n'.join(file_urls))
-    results = []
-    for f in file_urls:
-        if '.asdm.' in f:
-            results.append(f)
-        elif re.match(r'.*[0-9]{3,4}_of_[0-9]{3,4}\.tar$', f):
-            results.append(f)
-    return results
+def _get_artifact_info(member_ous):
+    # return the artifact information associated with the member_ous
+    # Format: [(URL, content_length, content_type), ...]
+    result = []
+    datalink = pyvo.dal.adhoc.DatalinkResults.from_result_url(
+        '{}?{}'.format(ALMA_DATALINK_URL,
+            urlencode({'ID': member_ous}, True)))
+    for service_def in datalink:
+        if service_def.semantics in \
+           ['http://www.opencadc.org/caom2#pkg #progenitor',
+                'http://www.opencadc.org/caom2#pkg #auxiliary']:
+            result.append((service_def.access_url, service_def.content_length,
+                           service_def.content_type))
+    return result
 
 
 def _art_url2uri(file_url, member_ous):
@@ -392,38 +418,6 @@ def _art_uri2components(art_uri):
     # result of form (collection, observation_id, file_name
     uri = art_uri.replace('alma:', '')
     return uri.split('/')
-
-
-def add_raw_artifact(plane, file_url, member_ous):
-    """ Adds a raw artifact to the plane """
-    file_uri = _art_url2uri(file_url, member_ous)
-    # we found a lot of errors calling HEAD. Do a few retries
-    content_length = 0  # default
-    content_type = ''
-    for i in range(3):
-        file_header = requests.head(file_url)
-        logger.info('i={}, status={}'.format(i, file_header.status_code))
-        if file_header.status_code == 200:
-            content_type = file_header.headers['Content-Type']
-            try:
-                content_length = int(file_header.headers['Content-Length'])
-            except KeyError:
-                logger.error("No content length returned: {}".format(file_url))
-            break
-        if file_header.status_code == 401:
-            break
-    if i == 2:
-        raise RuntimeError('Cannot get head info for file {}'.format(file_url))
-    if content_type == '':
-        content_type = mimetypes.guess_type(file_url)[0]
-    product_type = caom2.ProductType.SCIENCE
-    artifact = caom2.Artifact(file_uri, product_type,
-                              caom2.ReleaseType.META,
-                              content_type=content_type,
-                              content_length=content_length)
-    artifact.last_modified = plane.max_last_modified
-    artifact.max_last_modified = plane.max_last_modified
-    plane.artifacts[file_uri] = artifact
 
 
 def _get_position(row, table):

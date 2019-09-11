@@ -95,7 +95,8 @@ from collection import _add_subinterval  # noqa
 
 DATA_DIR = os.path.join(PARENT_DIR, 'tests', 'data')
 
-ALMA_OBS_IDS = ['A001_X87d_X8bc', 'A001_X11a2_X11', 'A001_X144_Xef']
+ALMA_OBS_IDS = ['A001_X87d_X8bc', 'A001_X11a2_X11', 'A001_X144_Xef',
+                'A001_X131c_X11f']
 ALMA_PROPRIETARY_OBS_IDS = ['A001_X2cf_X15']
 
 
@@ -117,10 +118,10 @@ def test_subintervals():
 @pytest.mark.skipif(one_test, reason='One test mode')
 def test_resolve_artifact():
     url = collection.resolve_artifact_uri(
-        'alma:ALMA/A001_X131c_X12f/2017.A.'
-        '00054.S_uid___A001_X131c_X12f_001_of_001.tar')
+        'alma:ALMA/A001_X131c_X12f/'
+        '2017.A.00054.S_uid___A001_X131c_X12f_auxiliary.tar')
     assert re.match(
-        'http.*2017.A.00054.S_uid___A001_X131c_X12f_001_of_001.tar', url)
+        'http.*2017.A.00054.S_uid___A001_X131c_X12f_auxiliary.tar', url)
     # the other url of the other artifact in the plane is cached
     assert len(collection.cached_art_urls) == 1
     # call the second one
@@ -135,24 +136,15 @@ def test_resolve_artifact():
 def test_get_obs():
     obs = collection.list_observations(start=datetime.strptime('01-03-2011',
                                                                '%d-%m-%Y'),
+                                       end=datetime.utcnow(), maxrec=10)
+    assert 10 == len(obs)
+    obs = collection.list_observations(start=datetime.strptime('01-03-2011',
+                                                               '%d-%m-%Y'),
                                        end=datetime.strptime('01-04-2011',
                                                              '%d-%m-%Y'))
-    expected_obs = \
-        [('A002_X1a5821_X2c', datetime.strptime('2011-03-02T02:59:32.611',
-                                                IVOA_DATE_FORMAT)),
-         ('A002_X1a6455_X76', datetime.strptime('2011-03-02T08:27:23.299',
-                                                IVOA_DATE_FORMAT))]
-
-    assert len(expected_obs) == len(obs)
     for i, o in enumerate(obs):
         fields = o.split('\t')
         assert 'ALMA' == fields[0].strip()
-        assert expected_obs[i][0] == fields[1].strip()
-        assert expected_obs[i][1] == datetime.strptime(fields[2].strip(),
-                                                       IVOA_DATE_FORMAT)
-
-    obs = collection.list_observations(maxrec=10)
-    assert 10 == len(obs)
 
 
 @pytest.mark.skipif(one_test, reason='One test mode')
