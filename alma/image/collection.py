@@ -129,28 +129,30 @@ def resolve_artifact_uri(uri):
     :return: URL corresponding the artifact URI
     """
 
-    if uri in cached_art_urls:
-        logger.debug("Resolve {} from cache".format(uri))
-        url = cached_art_urls[uri]
-        del cached_art_urls[uri]
-        return url
+    # if uri in cached_art_urls:
+    #     logger.debug("Resolve {} from cache".format(uri))
+    #     url = cached_art_urls[uri]
+    #     del cached_art_urls[uri]
+    #     return url
     # get the observation id (member oud id)
-    (_, obs_id, file) = _art_uri2components(uri)
-    if not obs_id:
+
+    (_, file) = _art_uri2components(uri)
+    if not file:
         raise AttributeError(
             'Cannot determine the observation id for artifact uri {}'.
             format(uri))
-    member_ous = _to_member_ouss_id(obs_id)
-    art_info = _get_artifact_info(member_ous)
-    url = None
-    logger.debug("Add urls for {} to cache".format(obs_id))
-    for f in art_info:
-        if file in f[0]:
-            url = f[0]
-        else:
-            cached_art_urls[_art_url2uri(f[0], member_ous)] = f[0]
-    logger.debug('Size of artifact URL cache: {}'.format(len(cached_art_urls)))
-    return url
+    # member_ous = _to_member_ouss_id(obs_id)
+    # art_info = _get_artifact_info(member_ous)
+    # url = None
+    # logger.debug("Add urls for {} to cache".format(obs_id))
+    # for f in art_info:
+    #     if file in f[0]:
+    #         url = f[0]
+    #     else:
+    #         cached_art_urls[_art_url2uri(f[0], member_ous)] = f[0]
+    # logger.debug('Size of artifact URL cache: {}'.format(len(cached_art_urls)))
+    # Note in an effort
+    return 'https://almasciencedl.eso.org/dataPortal/' + file
 
 
 def list_observations(start=None, end=None, maxrec=None):
@@ -427,7 +429,7 @@ def _get_artifact_info(member_ous):
 
 def _art_url2uri(file_url, member_ous):
     filename = file_url.split('/')[-1]
-    file_uri = 'alma:ALMA/{}/{}'.format(_to_obs_id(member_ous), filename)
+    file_uri = 'alma:ALMA/{}'.format(filename)
     return file_uri
 
 

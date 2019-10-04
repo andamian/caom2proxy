@@ -118,18 +118,10 @@ def test_subintervals():
 @pytest.mark.skipif(one_test, reason='One test mode')
 def test_resolve_artifact():
     url = collection.resolve_artifact_uri(
-        'alma:ALMA/A001_X131c_X12f/'
-        '2017.A.00054.S_uid___A001_X131c_X12f_auxiliary.tar')
+        'alma:ALMA/2017.A.00054.S_uid___A001_X131c_X12f_auxiliary.tar')
     assert re.match(
         'http.*2017.A.00054.S_uid___A001_X131c_X12f_auxiliary.tar', url)
     # the other url of the other artifact in the plane is cached
-    assert len(collection.cached_art_urls) == 1
-    # call the second one
-    file2 = list(collection.cached_art_urls)[0]
-    url2 = collection.cached_art_urls[file2]
-    url = collection.resolve_artifact_uri(file2)
-    assert url2 == url
-    assert len(collection.cached_art_urls) == 0
 
 
 @pytest.mark.skipif(one_test, reason='One test mode')

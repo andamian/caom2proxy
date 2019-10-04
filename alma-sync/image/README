@@ -1,0 +1,9 @@
+This container runs the cadc-alma-sync.py script that lists and downloads missing ALMA files into the CADC storage
+
+To build the container run:
+
+docker build -t alma-sync .
+
+To run the container (with the list command for ex):
+
+docker run --rm -it -v $HOME:/home/userdir alma-sync cadc-alma-sync.py list --cert '/home/userdir/.ssl/cadcproxy.pem'
