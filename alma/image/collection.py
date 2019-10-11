@@ -99,9 +99,9 @@ ALMA_RELEASE_DATE_FORMAT = '%Y-%m-%d'
 
 # TODO temporary until fix for https://github.com/opencadc/tap/issues/57
 # installed at Alma
-# ALMA_TAP_SYNC_URL = 'https://almascience.nrao.edu/tap/sync'
-ALMA_TAP_SYNC_URL = \
-    'http://beta.cadc-ccda.hia-iha.nrc-cnrc.gc.ca/alma-obscore/sync'
+ALMA_TAP_SYNC_URL = 'https://almascience.nrao.edu/tap/sync'
+#ALMA_TAP_SYNC_URL = \
+#    'http://beta.cadc-ccda.hia-iha.nrc-cnrc.gc.ca/alma-obscore/sync'
 ALMA_DATALINK_URL = \
     'http://beta.cadc-ccda.hia-iha.nrc-cnrc.gc.ca/alma-datalink/sync'
 
@@ -185,7 +185,7 @@ def list_observations(start=None, end=None, maxrec=None):
             else:
                 where = "WHERE lastModified<='{}'".format(date2ivoa(end))
         query = "SELECT {} obs_id, min(lastModified) AS minLastModified " \
-                "FROM ivoa.obscore {} GROUP BY obs_id " \
+                "FROM alma.obscore {} GROUP BY obs_id " \
                 "ORDER by minLastModified".\
             format(top, where)
     else:
@@ -197,7 +197,7 @@ def list_observations(start=None, end=None, maxrec=None):
             else:
                 where = 'WHERE t_min<={}'.format(AstropyTime(end).mjd)
         query = "SELECT {} obs_id, min(t_min) AS obsTime " \
-                "FROM ivoa.obscore {} GROUP BY obs_id ORDER by obsTime". \
+                "FROM alma.obscore {} GROUP BY obs_id ORDER by obsTime". \
             format(top, where)
     response = requests.get(ALMA_TAP_SYNC_URL,
                             params={'QUERY': query, 'LANG': 'ADQL'})
@@ -325,13 +325,15 @@ def get_calib_planes(observation, table):
                 format(observation.observation_id, tmp)
             logger.debug(msg)
             logger.debug(f)
-            raise RuntimeError(msg)
-        if plane.data_release > datetime.utcnow():
-            ex = RuntimeError(
-                'Observation {} is proprietary. Release date: {}.'.
-                format(observation.observation_id, plane.data_release))
-            ex.status_code = 403
-            raise ex
+        # ad: Commented out in order to be able to harvest all
+        # the observations regardless of the release date.
+        #     raise RuntimeError(msg)
+        # if plane.data_release > datetime.utcnow():
+        #     ex = RuntimeError(
+        #         'Observation {} is proprietary. Release date: {}.'.
+        #         format(observation.observation_id, plane.data_release))
+        #     ex.status_code = 403
+        #     raise ex
 
         plane.position = _get_position(row, table)
         plane.energy = _get_energy(row, table)

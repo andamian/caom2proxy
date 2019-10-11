@@ -97,7 +97,7 @@ DATA_DIR = os.path.join(PARENT_DIR, 'tests', 'data')
 
 ALMA_OBS_IDS = ['A001_X87d_X8bc', 'A001_X11a2_X11', 'A001_X144_Xef',
                 'A001_X131c_X11f']
-ALMA_PROPRIETARY_OBS_IDS = ['A001_X2cf_X15']
+#ALMA_PROPRIETARY_OBS_IDS = ['A001_X2cf_X15']
 
 
 @pytest.mark.skipif(one_test, reason='One test mode')
@@ -168,10 +168,11 @@ def test_get_observation():
         expected_obs = reader.read(benchmark_obs_file)
         assert not get_differences(expected_obs, obs)
 
+    # Not doing this anymore
     # check that a RuntimeError with status_code 403 is thrown when trying to
     # get a proprietary observation. Hopefully the used observation will stay
     # proprietary until the release date in year 3000 ...
-    for id in ALMA_PROPRIETARY_OBS_IDS:
-        with pytest.raises(RuntimeError) as e_info:
-            collection.get_observation(id)
-    assert 403 == e_info.value.status_code
+    # for id in ALMA_PROPRIETARY_OBS_IDS:
+    #     with pytest.raises(RuntimeError) as e_info:
+    #         collection.get_observation(id)
+    # assert 403 == e_info.value.status_code

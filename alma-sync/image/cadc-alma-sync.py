@@ -87,7 +87,8 @@ import copy
 FORMAT = '%(thread)d %(asctime)-15s: %(message)s'
 logger = logging.getLogger(__name__)
 
-ALMA_MIRRORS = ['https://almascience.nrao.edu', 'https://almascience.eso.org',
+ALMA_MIRRORS = ['https://almascience.nrao.edu',
+              ##  'https://almascience.eso.org',
                 'https://almascience.nao.ac.jp']
 
 job_queue = Queue()  # queue of incomplete observations to be downloaded
@@ -122,10 +123,11 @@ class DownloadWorker():
             logger.debug(
                 'Downoading obs {} from {}'.format(obs[0],
                                                    self._alma.dataarchive_url))
-            self.num_obs += 1
+
             try:
                 self.total_size += \
                     download(self._alma, self._cadc_data, obs[0], obs[1])
+                self.num_obs += 1
             except Exception as e:
                 logger.error('Failed to transfer obs {} - {}'.format(obs[0],
                                                                      str(e)))
@@ -138,7 +140,8 @@ class DownloadWorker():
             job_queue.task_done()
 
 
-def get_artifacs_to_sync(subject, start=None, end=None):
+def get_artifacs_to_sync(subject, start=None, end=None, all=False,
+                         incomplete=False):
     ad_client = cadctap.CadcTapClient(subject,
                                       resource_id='ivo://cadc.nrc.ca/ad')
     logging.debug('Query AD')
@@ -159,17 +162,44 @@ def get_artifacs_to_sync(subject, start=None, end=None):
     if end:
         interval += ' and p.time_bounds_lower<={}'.format(Time(end).mjd)
 
-    ams_client.query(
-        'select observationID, a.uri, contentLength, a.contentType '
-        'from caom2.Observation o '
-        'join caom2.Plane p on o.obsID=p.obsID join caom2.Artifact a on '
-        'a.planeID=p.planeID left join tap_upload.ad ad on a.uri=ad.uri '
-        'and a.contentLength=ad.fileSize and a.contentType=ad.contentType '
-        'where ad.uri is Null' + interval,
-        output_file=result, response_format='csv',
-        tmptable='ad:' + tf.name, data_only=True)
+    if incomplete:
+        incomplete_query = (
+            'select distinct observationID from caom2.Observation o '
+            'join caom2.Plane p on o.obsID=p.obsID join caom2.Artifact a on '
+            'a.planeID=p.planeID left join tap_upload.ad ad on a.uri=ad.uri '
+            'and a.contentLength=ad.fileSize and a.contentType=ad.contentType '
+            'where ad.uri is Null')
+        if not all:
+            incomplete_query = (
+                    "select observationID from caom2.Observation o join "
+                    "caom2.Plane p on o.obsID=p.obsID join caom2.Artifact a "
+                    "on p.planeID=a.planeID where observationID in ({}) and "
+                    "uri like '%auxiliary.tar'".format(incomplete_query))
+            
+        sql = (
+            'select observationID, a.uri, contentLength, a.contentType '
+            'from caom2.Observation o '
+            'join caom2.Plane p on o.obsID=p.obsID join caom2.Artifact a on '
+            'a.planeID=p.planeID left join tap_upload.ad ad on a.uri=ad.uri '
+            'and a.contentLength=ad.fileSize and a.contentType=ad.contentType '
+            'where ad.uri is Null and observationID in ({})'.format(
+                incomplete_query))
+    else:
+        sql = (
+            'select observationID, a.uri, contentLength, a.contentType '
+            'from caom2.Observation o '
+            'join caom2.Plane p on o.obsID=p.obsID join caom2.Artifact a on '
+            'a.planeID=p.planeID where observationID not in ('
+            'select observationID from caom2.Observation o '
+            'join caom2.Plane p on o.obsID=p.obsID join caom2.Artifact a on '
+            'a.planeID=p.planeID left join tap_upload.ad ad on a.uri=ad.uri '
+            'and a.contentLength=ad.fileSize and a.contentType=ad.contentType '
+            'where ad.uri is Null)'
+        )
+    logger.debug('Executing ' + sql)
+    ams_client.query(sql, output_file=result, response_format='csv',
+                     tmptable='ad:' + tf.name, data_only=True)
 
-    # TODO remove not above
     obs = {}
     for row in result.getvalue().split('\n'):
         elems = row.split(',')
@@ -181,20 +211,47 @@ def get_artifacs_to_sync(subject, start=None, end=None):
                 obs[elems[0]][file_name] = elems[2:]
             else:
                 obs[elems[0]] = {file_name: elems[2:]}
+
+    if not all and not incomplete:
+        # Filter out observations with no auxiliary files
+        for ob in list(obs.keys()):
+            found = False
+            for file in obs[ob]:
+                if 'auxiliary' in file:
+                    found = True
+                    break
+            if not found:
+                del obs[ob]
     return obs
 
 
-def list_obs(subject, start=None, end=None):
-    obs = get_artifacs_to_sync(subject, start, end)
+def list_obs(subject, start=None, end=None, all=False, incomplete=False):
+    """
+    List complete observations, i.e. observations that have their artifacts
+    in the CADC storage
+    :param subject: subject performing action
+    :param all: If True list all incomplete observations, otherwise just
+    observations containing auxiliary files
+    :param all: list all observations if True, only those with auxiliary
+    artifacts otherwise
+    :param incomplete: If true, list incomplete observations instead
+    (observations with missing artifacts)
+    :return:
+    """
+    obs = get_artifacs_to_sync(subject, start, end, all, incomplete)
     num_artifacts = 0
+    total_size = 0
     for key in obs:
-        print('{}:'.format(key))
+        print('{}'.format(key))
         for file in obs[key].items():
-            print('\t{} ({:.2f}GB)'.format(file[0],
+            if incomplete:
+                print('\t{} ({:.2f}GB)'.format(file[0],
                                          int(file[1][0])/1024/1024/1024))
+            total_size += int(file[1][0])/1024/1024/1024
         num_artifacts += len(obs[key])
-    print('\nOut of sync: {} Observations, {} Artifacts'.
-          format(len(obs), num_artifacts))
+    msg = 'Incomplete' if incomplete else 'Complete'
+    print('\n{} observations: {} Observations, {} Artifacts ({:.2f}GB)'.
+          format(msg, len(obs), num_artifacts, total_size))
 
 
 def get_missing_files_obs(subject, obsid):
@@ -255,6 +312,7 @@ def download(alma_client, data_client, obsid, missing_files):
         return 0
     files = alma_client.stage_data(_to_member_ouss_id(obsid))
     total_size = 0
+    errors = False
     for file in list(missing_files.keys()):
         for alma_file in files:
             if alma_file['URL'].endswith(file):
@@ -266,18 +324,28 @@ def download(alma_client, data_client, obsid, missing_files):
                     format(obsid, file, expected_size, alma_size))
                 logger.info('Downloading file {} in obs {} from {}...'.
                             format(file, obsid, alma_file['URL']))
-                data_client.put_file('ALMA', alma_file['URL'], input_name=file,
-                                     mime_type=missing_files[file][1],
-                                     mime_encoding=None,
-                                     md5_check=False)
+                try:
+                    data_client.put_file('ALMA', alma_file['URL'],
+                                         input_name=file,
+                                         mime_type=missing_files[file][1],
+                                         mime_encoding=None,
+                                         md5_check=False)
+                except Exception as e:
+                    errors = True
+                    logger.warning('Errors transferring obs/file'.format(obsid,
+                                                                         file))
+                    logger.debug('Error details: ' + str(e))
+                    break
                 total_size += expected_size
                 del missing_files[file]
                 break
+    if errors:
+        raise RuntimeError(obsid + ' not downloaded completely.')
     return total_size
 
 
 def download_artifacts(subject, obsid, threads, start=None, end=None,
-                       retry=False):
+                       retry=False, all=False):
     """
     Download missing artifacts
     :param subject: subject performing action
@@ -285,6 +353,8 @@ def download_artifacts(subject, obsid, threads, start=None, end=None,
     Download all missing artifacts if this is None
     :param threads: Number of threads per site
     :param retry: Retry to download observation if error occurs
+    :param all: If True download all incomplete observations, otherwise just
+    observations containing auxiliary files
     :return: 
     """
     start_proc = datetime.datetime.now()
@@ -303,7 +373,8 @@ def download_artifacts(subject, obsid, threads, start=None, end=None,
                         download(Alma, data_client, obsid, missing_files)
                     site_num_obs[Alma.dataarchive_url] = 1
                 else:
-                    observations = get_artifacs_to_sync(subject, start, end)
+                    observations = get_artifacs_to_sync(subject, start, end,
+                                                        all, True)
                     Alma._dataarchive_url = 'https://almascience.eso.org'
                     for obs in observations.keys():
                         site_amount[Alma.dataarchive_url] += \
@@ -323,7 +394,8 @@ def download_artifacts(subject, obsid, threads, start=None, end=None,
     else:
         # create the pool of workers
         # populate the queue
-        for obs in get_artifacs_to_sync(subject, start, end).items():
+        for obs in get_artifacs_to_sync(subject, start, end,
+                                        all, True).items():
             job_queue.put(obs)
 
         tpool = []
@@ -342,7 +414,7 @@ def download_artifacts(subject, obsid, threads, start=None, end=None,
         # wait for job_queue to finish
         job_queue.join()
 
-        duration = datetime.datetime.now() - start
+        duration = datetime.datetime.now() - start_proc
         # stop all the threads
         for i in range(len(tpool)):
             job_queue.put(None)
@@ -390,15 +462,18 @@ def main():
         version=0.01,
         default_resource_id='ivo://cadc.nrc.ca/cadc_alma_sync')
 
-
     subparsers = parser.add_subparsers(
         dest='cmd',
         help='supported commands. Use the -h|--help argument of a command '
              'for more details')
     list_parser = subparsers.add_parser(
         'list',
-        description='List ALMA observations and artifacts not in storage.',
-        help='List ALMA observations and artifacts not in storage.')
+        description='List ALMA observations and artifacts in CADC storage.',
+        help='List ALMA observations and artifacts in CADC storage.')
+    list_parser.add_argument(
+        '-i', '--incomplete', action='store_true',
+        help='Reverse - list only the incomplete observations.'
+    )
 
     download_parser = subparsers.add_parser(
         'download',
@@ -414,6 +489,10 @@ def main():
         pars.add_argument('--end', type=str2date,
                           help='End with observation date '
                                '(UTC IVOA format: YYYY-mm-ddTH:M:S)')
+        pars.add_argument(
+            '-a', '--all', action='store_true',
+            help='Applly to all observations (with or without auxiliary files)'
+        )
 
     download_parser.add_argument(
         '-t', '--threads', type=int,
@@ -446,18 +525,18 @@ def main():
         if args.obsid:
             check_obs(subject, args.obsid)
         else:
-            list_obs(subject, args.start, args.end)
+            list_obs(subject, args.start, args.end, args.all, args.incomplete)
     elif args.cmd == 'download':
         download_artifacts(subject, args.obsid, args.threads,
-                           args.start, args.end, args.retry)
+                           args.start, args.end, args.retry, args.all)
     elif args.cmd == 'test':
         test(subject)
 
 
 if __name__== '__main__':
     import sys
-    #sys.argv = 'cadc-alma-sync list -v --cert /Users/adriand/.ssl/cadcproxy.pem --start 2017-01-01T01:00:00 --end 2018-12-11T01:00:00'.split()
-    #sys.argv = 'cadc-alma-sync download -v --cert /Users/adriand/.ssl/cadcproxy.pem -o A001_X879_X46a'.split()
-    #sys.argv = 'cadc-alma-sync test --cert /Users/adriand/.ssl/cadcproxy.pem'.split()
+    #sys.argv = 'cadc-alma-sync list --cert /Users/adriand/.ssl/cadcproxy.pem --start 2017-01-01T01:00:00 --end 2018-12-11T01:00:00'.split()
+    #sys.argv = 'cadc-alma-sync download -v --cert /Users/adriand/.ssl/cadcproxy.pem -o A001_X2f7_X492'.split()
+    #sys.argv = 'cadc-alma-sync download --cert /Users/adriand/.ssl/cadcproxy.pem'.split()
 
     main()
